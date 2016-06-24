@@ -209,6 +209,25 @@ add-zsh-hook chpwd load-nvmrc
 load-nvmrc
 ```
 
+#### Bash
+
+##### Calling `nvm use` automatically in a directory with a `.nvmrc` file
+
+Put this into your `$HOME/.bashrc` to call `nvm use` automatically whenever you enter a directory that contains an
+`.nvmrc` file with a string telling nvm which node to `use`:
+
+```bash
+function nvm_use_if_needed () {
+    [[ -r ./.nvmrc  && -s ./.nvmrc ]] || return
+    WANTED=$(sed 's/v//' < ./.nvmrc)
+    CURRENT=$(hash node 2>/dev/null && node -v | sed 's/v//')
+    if [ "$WANTED" != "$CURRENT" ]; then
+        nvm use
+    fi
+}
+export PROMPT_COMMAND="$PROMPT_COMMAND ; nvm_use_if_needed"
+```
+
 ## License
 
 nvm is released under the MIT license.
