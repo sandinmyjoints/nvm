@@ -6,6 +6,8 @@
 # Implemented by Tim Caswell <tim@creationix.com>
 # with much bash help from Matthew Ranney
 
+# "local" warning, quote expansion warning
+# shellcheck disable=SC2039,SC2016
 { # this ensures the entire script is downloaded #
 
 NVM_SCRIPT_SOURCE="$_"
@@ -15,12 +17,16 @@ nvm_echo() {
     nvm_echo() {
       \printf %s\\n "$*" # on zsh, `command printf` sometimes fails
     }
-    nvm_echo "$*"
+    nvm_echo "$@"
   }
 }
 
 nvm_err() {
-  >&2 nvm_echo "$*"
+  >&2 nvm_echo "$@"
+}
+
+nvm_grep() {
+  GREP_OPTIONS='' command grep "$@"
 }
 
 nvm_has() {
@@ -57,10 +63,10 @@ nvm_get_latest() {
 
 nvm_download() {
   if nvm_has "curl"; then
-    curl -q $*
+    curl -q "$@"
   elif nvm_has "wget"; then
     # Emulate curl with wget
-    ARGS=$(nvm_echo "$*" | command sed -e 's/--progress-bar /--progress=bar /' \
+    ARGS=$(nvm_echo "$@" | command sed -e 's/--progress-bar /--progress=bar /' \
                            -e 's/-L //' \
                            -e 's/-I /--server-response /' \
                            -e 's/-s /-q /' \
@@ -100,6 +106,7 @@ fi
 
 # Auto detect the NVM_DIR when not set
 if [ -z "${NVM_DIR-}" ]; then
+  # shellcheck disable=SC2128
   if [ -n "$BASH_SOURCE" ]; then
     NVM_SCRIPT_SOURCE="${BASH_SOURCE[0]}"
   fi
@@ -163,7 +170,12 @@ nvm_rc_version() {
   NVMRC_PATH="$(nvm_find_nvmrc)"
   if [ -e "$NVMRC_PATH" ]; then
     read -r NVM_RC_VERSION < "$NVMRC_PATH" || printf ''
-    nvm_echo "Found '$NVMRC_PATH' with version <$NVM_RC_VERSION>"
+    if [ -n "$NVM_RC_VERSION" ]; then
+      nvm_echo "Found '$NVMRC_PATH' with version <$NVM_RC_VERSION>"
+    else
+      nvm_err "Warning: empty .nvmrc file found at \"$NVMRC_PATH\""
+      return 2
+    fi
   else
     nvm_err "No .nvmrc file found"
     return 1
@@ -325,7 +337,7 @@ nvm_remote_versions() {
         return 1
       fi
       VERSIONS="$(nvm_echo "$(nvm_ls_remote "$PATTERN")
-$(nvm_ls_remote_iojs "$PATTERN")" | command grep -v "N/A" | command sed '/^$/d')"
+$(nvm_ls_remote_iojs "$PATTERN")" | nvm_grep -v "N/A" | command sed '/^$/d')"
     ;;
   esac
 
@@ -588,7 +600,7 @@ nvm_resolve_alias() {
     fi
 
     if [ -n "$ALIAS_TEMP" ] \
-      && command printf "$SEEN_ALIASES" | command grep -e "^$ALIAS_TEMP$" > /dev/null; then
+      && command printf "$SEEN_ALIASES" | nvm_grep -e "^$ALIAS_TEMP$" > /dev/null; then
       ALIAS="∞"
       break
     fi
@@ -733,7 +745,7 @@ nvm_ls() {
     local ZHS_HAS_SHWORDSPLIT_UNSET
     ZHS_HAS_SHWORDSPLIT_UNSET=1
     if nvm_has "setopt"; then
-      ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | command grep shwordsplit > /dev/null ; nvm_echo $?)
+      ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | nvm_grep shwordsplit > /dev/null ; nvm_echo $?)
       setopt shwordsplit
     fi
 
@@ -767,34 +779,40 @@ nvm_ls() {
       fi
     fi
 
-    if ! [ -d "$NVM_DIRS_TO_SEARCH1" ]; then
+    if ! [ -d "$NVM_DIRS_TO_SEARCH1" ] || ! (command ls -1qA "$NVM_DIRS_TO_SEARCH1" | nvm_grep -q .); then
       NVM_DIRS_TO_SEARCH1=''
     fi
-    if ! [ -d "$NVM_DIRS_TO_SEARCH2" ]; then
+    if ! [ -d "$NVM_DIRS_TO_SEARCH2" ] || ! (command ls -1qA "$NVM_DIRS_TO_SEARCH2" | nvm_grep -q .); then
       NVM_DIRS_TO_SEARCH2="$NVM_DIRS_TO_SEARCH1"
     fi
-    if ! [ -d "$NVM_DIRS_TO_SEARCH3" ]; then
+    if ! [ -d "$NVM_DIRS_TO_SEARCH3" ] || ! (command ls -1qA "$NVM_DIRS_TO_SEARCH3" | nvm_grep -q .); then
       NVM_DIRS_TO_SEARCH3="$NVM_DIRS_TO_SEARCH2"
     fi
 
+    local SEARCH_PATTERN
     if [ -z "$PATTERN" ]; then
       PATTERN='v'
+      SEARCH_PATTERN='.*'
+    else
+      SEARCH_PATTERN="$(echo "${PATTERN}" | sed "s#\.#\\\.#g;")"
     fi
     if [ -n "$NVM_DIRS_TO_SEARCH1$NVM_DIRS_TO_SEARCH2$NVM_DIRS_TO_SEARCH3" ]; then
-      VERSIONS="$(command find "$NVM_DIRS_TO_SEARCH1" "$NVM_DIRS_TO_SEARCH2" "$NVM_DIRS_TO_SEARCH3" -maxdepth 1 -type d -name "$PATTERN*" \
+      VERSIONS="$(command find "$NVM_DIRS_TO_SEARCH1"/* "$NVM_DIRS_TO_SEARCH2"/* "$NVM_DIRS_TO_SEARCH3"/* -name . -o -type d -prune -o -name "$PATTERN*" \
         | command sed "
-            s#$NVM_VERSION_DIR_IOJS/#$NVM_IOJS_PREFIX-#;
-            \#$NVM_VERSION_DIR_IOJS# d;
-            s#^$NVM_DIR/##;
+            s#${NVM_VERSION_DIR_IOJS}/#versions/${NVM_IOJS_PREFIX}/#;
+            s#^${NVM_DIR}/##;
+            \#^[^v]# d;
             \#^versions\$# d;
             s#^versions/##;
-            s#^v#$NVM_NODE_PREFIX-v#;
-            s#^\($NVM_IOJS_PREFIX\)[-/]v#\1.v#;
-            s#^\($NVM_NODE_PREFIX\)[-/]v#\1.v#" \
-        | command sort -t. -u -k 2.2,2n -k 3,3n -k 4,4n \
+            s#^v#${NVM_NODE_PREFIX}/v#;
+            \#${SEARCH_PATTERN}# !d;
+          " \
+        | command sed "s#^\([^/]\{1,\}\)/\(.*\)\$#\2.\1#;" \
+        | command sort -t. -u -k 1.2,1n -k 2,2n -k 3,3n \
         | command sed "
-            s/^\($NVM_IOJS_PREFIX\)\./\1-/;
-            s/^$NVM_NODE_PREFIX\.//" \
+            s#\(.*\)\.\([^\.]\{1,\}\)\$#\2-\1#;
+            s#^${NVM_NODE_PREFIX}-##;
+          " \
       )"
     fi
 
@@ -878,7 +896,7 @@ nvm_ls_remote_index_tab() {
   fi
   ZHS_HAS_SHWORDSPLIT_UNSET=1
   if nvm_has "setopt"; then
-    ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | command grep shwordsplit > /dev/null ; nvm_echo $?)
+    ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | nvm_grep shwordsplit > /dev/null ; nvm_echo $?)
     setopt shwordsplit
   fi
   VERSIONS="$(nvm_download -L -s "$MIRROR/index.tab" -o - \
@@ -886,7 +904,7 @@ nvm_ls_remote_index_tab() {
         1d;
         s/^/$PREFIX/;
         s/[[:blank:]].*//" \
-    | command grep -w "$PATTERN" \
+    | nvm_grep -w "$PATTERN" \
     | $SORT_COMMAND)"
   if [ "$ZHS_HAS_SHWORDSPLIT_UNSET" -eq 1 ] && nvm_has "unsetopt"; then
     unsetopt shwordsplit
@@ -1024,7 +1042,7 @@ nvm_print_implicit_alias() {
 
       ZHS_HAS_SHWORDSPLIT_UNSET=1
       if nvm_has "setopt"; then
-        ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | command grep shwordsplit > /dev/null ; nvm_echo $?)
+        ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | nvm_grep shwordsplit > /dev/null ; nvm_echo $?)
         setopt shwordsplit
       fi
 
@@ -1033,7 +1051,7 @@ nvm_print_implicit_alias() {
       NVM_IOJS_VERSION="$($NVM_COMMAND)"
       EXIT_CODE="$?"
       if [ "_$EXIT_CODE" = "_0" ]; then
-        NVM_IOJS_VERSION="$(nvm_echo "$NVM_IOJS_VERSION" | command sed "s/^$NVM_IMPLICIT-//" | command grep -e '^v' | command cut -c2- | command cut -d . -f 1,2 | uniq | command tail -1)"
+        NVM_IOJS_VERSION="$(nvm_echo "$NVM_IOJS_VERSION" | command sed "s/^$NVM_IMPLICIT-//" | nvm_grep -e '^v' | command cut -c2- | command cut -d . -f 1,2 | uniq | command tail -1)"
       fi
 
       if [ "$ZHS_HAS_SHWORDSPLIT_UNSET" -eq 1 ] && nvm_has "unsetopt"; then
@@ -1059,11 +1077,11 @@ nvm_print_implicit_alias() {
 
       ZHS_HAS_SHWORDSPLIT_UNSET=1
       if nvm_has "setopt"; then
-        ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | command grep shwordsplit > /dev/null ; nvm_echo $?)
+        ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | nvm_grep shwordsplit > /dev/null ; nvm_echo $?)
         setopt shwordsplit
       fi
 
-      LAST_TWO=$($NVM_COMMAND | command grep -e '^v' | command cut -c2- | command cut -d . -f 1,2 | uniq)
+      LAST_TWO=$($NVM_COMMAND | nvm_grep -e '^v' | command cut -c2- | command cut -d . -f 1,2 | uniq)
 
       if [ "$ZHS_HAS_SHWORDSPLIT_UNSET" -eq 1 ] && nvm_has "unsetopt"; then
         unsetopt shwordsplit
@@ -1078,7 +1096,7 @@ nvm_print_implicit_alias() {
 
   ZHS_HAS_SHWORDSPLIT_UNSET=1
   if nvm_has "setopt"; then
-    ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | command grep shwordsplit > /dev/null ; nvm_echo $?)
+    ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | nvm_grep shwordsplit > /dev/null ; nvm_echo $?)
     setopt shwordsplit
   fi
   for MINOR in $LAST_TWO; do
@@ -1086,7 +1104,7 @@ nvm_print_implicit_alias() {
     if [ "_0${NORMALIZED_VERSION#?}" != "_$NORMALIZED_VERSION" ]; then
       STABLE="$MINOR"
     else
-      MOD=$(expr "$NORMALIZED_VERSION" \/ 1000000 \% 2)
+      MOD="$(awk 'BEGIN { print int(ARGV[1] / 1000000) % 2 ; exit(0) }' "$NORMALIZED_VERSION")"
       if [ "$MOD" -eq 0 ]; then
         STABLE="$MINOR"
       elif [ "$MOD" -eq 1 ]; then
@@ -1107,7 +1125,7 @@ nvm_print_implicit_alias() {
 
 nvm_get_os() {
   local NVM_UNAME
-  NVM_UNAME="$(uname -a)"
+  NVM_UNAME="$(command uname -a)"
   local NVM_OS
   case "$NVM_UNAME" in
     Linux\ *) NVM_OS=linux ;;
@@ -1135,13 +1153,14 @@ nvm_get_arch() {
       HOST_ARCH=$(isainfo -n)
     fi
   else
-     HOST_ARCH="$(uname -m)"
+     HOST_ARCH="$(command uname -m)"
   fi
 
   local NVM_ARCH
   case "$HOST_ARCH" in
     x86_64 | amd64) NVM_ARCH="x64" ;;
     i*86) NVM_ARCH="x86" ;;
+    aarch64) NVM_ARCH="arm64" ;;
     *) NVM_ARCH="$HOST_ARCH" ;;
   esac
   nvm_echo "${NVM_ARCH}"
@@ -1167,7 +1186,7 @@ nvm_get_minor_version() {
   PREFIXED_VERSION="$(nvm_format_version "$VERSION")"
 
   local MINOR
-  MINOR="$(nvm_echo "$PREFIXED_VERSION" | command grep -e '^v' | command cut -c2- | command cut -d . -f 1,2)"
+  MINOR="$(nvm_echo "$PREFIXED_VERSION" | nvm_grep -e '^v' | command cut -c2- | command cut -d . -f 1,2)"
   if [ -z "$MINOR" ]; then
     nvm_err 'invalid version number! (please report this)'
     return 3
@@ -1239,7 +1258,7 @@ nvm_install_merged_node_binary() {
   if [ -n "$NVM_OS" ]; then
     t="$VERSION-$NVM_OS-$(nvm_get_arch)"
     url="$MIRROR/$VERSION/$NODE_PREFIX-${t}.tar.${compression}"
-    sum="$(nvm_download -L -s "$MIRROR/$VERSION/SHASUMS256.txt" -o - | command grep "${NODE_PREFIX}-${t}.tar.${compression}" | command awk '{print $1}')"
+    sum="$(nvm_download -L -s "$MIRROR/$VERSION/SHASUMS256.txt" -o - | nvm_grep "${NODE_PREFIX}-${t}.tar.${compression}" | command awk '{print $1}')"
     local tmpdir
     tmpdir="$NVM_DIR/bin/node-${t}"
     local tmptarball
@@ -1249,7 +1268,7 @@ nvm_install_merged_node_binary() {
       nvm_echo "Downloading $url..." && \
       nvm_download -L -C - --progress-bar "$url" -o "$tmptarball" || \
       NVM_INSTALL_ERRORED=true
-    if grep '404 Not Found' "$tmptarball" >/dev/null; then
+    if nvm_grep '404 Not Found' "$tmptarball" >/dev/null; then
       NVM_INSTALL_ERRORED=true
       nvm_err "HTTP 404 at URL $url";
     fi
@@ -1313,7 +1332,7 @@ nvm_install_iojs_binary() {
     if nvm_binary_available "$VERSION"; then
       t="$VERSION-$NVM_OS-$(nvm_get_arch)"
       url="$MIRROR/$VERSION/$(nvm_iojs_prefix)-${t}.tar.${compression}"
-      sum="$(nvm_download -L -s "$MIRROR/$VERSION/SHASUMS256.txt" -o - | command grep "$(nvm_iojs_prefix)-${t}.tar.${compression}" | command awk '{print $1}')"
+      sum="$(nvm_download -L -s "$MIRROR/$VERSION/SHASUMS256.txt" -o - | nvm_grep "$(nvm_iojs_prefix)-${t}.tar.${compression}" | command awk '{print $1}')"
       local tmpdir
       tmpdir="$NVM_DIR/bin/iojs-${t}"
       local tmptarball
@@ -1323,7 +1342,7 @@ nvm_install_iojs_binary() {
         nvm_echo "Downloading $url..." && \
         nvm_download -L -C - --progress-bar "$url" -o "$tmptarball" || \
         NVM_INSTALL_ERRORED=true
-      if grep '404 Not Found' "$tmptarball" >/dev/null; then
+      if nvm_grep '404 Not Found' "$tmptarball" >/dev/null; then
         NVM_INSTALL_ERRORED=true
         nvm_err "HTTP 404 at URL $url";
       fi
@@ -1374,7 +1393,7 @@ nvm_install_node_binary() {
       fi
       t="$VERSION-$NVM_OS-$NVM_ARCH"
       url="$NVM_NODEJS_ORG_MIRROR/$VERSION/node-${t}.tar.gz"
-      sum=$(nvm_download -L -s "$NVM_NODEJS_ORG_MIRROR/$VERSION/SHASUMS.txt" -o - | command grep "node-${t}.tar.gz" | command awk '{print $1}')
+      sum=$(nvm_download -L -s "$NVM_NODEJS_ORG_MIRROR/$VERSION/SHASUMS.txt" -o - | nvm_grep "node-${t}.tar.gz" | command awk '{print $1}')
       local tmpdir
       tmpdir="$NVM_DIR/bin/node-${t}"
       local tmptarball
@@ -1383,7 +1402,7 @@ nvm_install_node_binary() {
       command mkdir -p "$tmpdir" && \
         nvm_download -L -C - --progress-bar "$url" -o "$tmptarball" || \
         NVM_INSTALL_ERRORED=true
-      if grep '404 Not Found' "$tmptarball" >/dev/null; then
+      if nvm_grep '404 Not Found' "$tmptarball" >/dev/null; then
         NVM_INSTALL_ERRORED=true
         nvm_err "HTTP 404 at URL $url";
       fi
@@ -1419,7 +1438,7 @@ nvm_get_make_jobs() {
   NVM_OS="$(nvm_get_os)"
   local NVM_CPU_THREADS
   if [ "_$NVM_OS" = "_linux" ]; then
-    NVM_CPU_THREADS="$(grep -c 'core id' /proc/cpuinfo)"
+    NVM_CPU_THREADS="$(nvm_grep -c -E '^processor.+: [0-9]+' /proc/cpuinfo)"
   elif [ "_$NVM_OS" = "_freebsd" ] || [ "_$NVM_OS" = "_darwin" ]; then
     NVM_CPU_THREADS="$(sysctl -n hw.ncpu)"
   elif [ "_$NVM_OS" = "_sunos" ]; then
@@ -1432,7 +1451,7 @@ nvm_get_make_jobs() {
   else
     nvm_echo "Detected that you have $NVM_CPU_THREADS CPU thread(s)"
     if [ "$NVM_CPU_THREADS" -gt 2 ]; then
-      NVM_MAKE_JOBS=$(($NVM_CPU_THREADS - 1))
+      NVM_MAKE_JOBS=$((NVM_CPU_THREADS - 1))
       nvm_echo "Set the number of jobs to $NVM_CPU_THREADS - 1 = $NVM_MAKE_JOBS jobs to speed up the build"
     else
       NVM_MAKE_JOBS=1
@@ -1480,10 +1499,10 @@ nvm_install_node_source() {
   local tmptarball
   tmptarball="$tmpdir/node-$VERSION.tar.gz"
 
-  if [ "$(nvm_download -L -s -I "$NVM_NODEJS_ORG_MIRROR/$VERSION/node-$VERSION.tar.gz" -o - 2>&1 | command grep '200 OK')" != '' ]; then
+  if [ "$(nvm_download -L -s -I "$NVM_NODEJS_ORG_MIRROR/$VERSION/node-$VERSION.tar.gz" -o - 2>&1 | nvm_grep '200 OK')" != '' ]; then
     tarball="$NVM_NODEJS_ORG_MIRROR/$VERSION/node-$VERSION.tar.gz"
-    sum=$(nvm_download -L -s "$NVM_NODEJS_ORG_MIRROR/$VERSION/SHASUMS.txt" -o - | command grep "node-${VERSION}.tar.gz" | command awk '{print $1}')
-  elif [ "$(nvm_download -L -s -I "$NVM_NODEJS_ORG_MIRROR/node-$VERSION.tar.gz" -o - | command grep '200 OK')" != '' ]; then
+    sum=$(nvm_download -L -s "$NVM_NODEJS_ORG_MIRROR/$VERSION/SHASUMS.txt" -o - | nvm_grep "node-${VERSION}.tar.gz" | command awk '{print $1}')
+  elif [ "$(nvm_download -L -s -I "$NVM_NODEJS_ORG_MIRROR/node-$VERSION.tar.gz" -o - | nvm_grep '200 OK')" != '' ]; then
     tarball="$NVM_NODEJS_ORG_MIRROR/node-$VERSION.tar.gz"
   fi
 
@@ -1669,10 +1688,10 @@ nvm_sanitize_path() {
   local SANITIZED_PATH
   SANITIZED_PATH="${1-}"
   if [ "_$SANITIZED_PATH" != "_$NVM_DIR" ]; then
-    SANITIZED_PATH="${SANITIZED_PATH/#$NVM_DIR/\$NVM_DIR}"
+    SANITIZED_PATH="$(nvm_echo "$SANITIZED_PATH" | command sed -e "s#$NVM_DIR#\$NVM_DIR#g")"
   fi
   if [ "_$SANITIZED_PATH" != "_$HOME" ]; then
-    SANITIZED_PATH="${SANITIZED_PATH/#$HOME/\$HOME}"
+    SANITIZED_PATH="$(nvm_echo "$SANITIZED_PATH" | command sed -e "s#$HOME#\$HOME#g")"
   fi
   nvm_echo "$SANITIZED_PATH"
 }
@@ -1711,9 +1730,6 @@ nvm() {
     return
   fi
 
-  local GREP_OPTIONS
-  GREP_OPTIONS=''
-
   # initialize local variables
   local VERSION
   local ADDITIONAL_PARAMETERS
@@ -1745,6 +1761,7 @@ nvm() {
       nvm_echo '  nvm ls                                    List installed versions'
       nvm_echo '  nvm ls <version>                          List versions matching a given description'
       nvm_echo '  nvm ls-remote                             List remote versions available for install'
+      nvm_echo '  nvm ls-remote <version>                   List remote versions available for install, matching a given <version>'
       nvm_echo '  nvm version <version>                     Resolve the given description to a single local version'
       nvm_echo '  nvm version-remote <version>              Resolve the given description to a single remote version'
       nvm_echo '  nvm deactivate                            Undo effects of `nvm` on current shell'
@@ -1771,7 +1788,7 @@ nvm() {
       local ZHS_HAS_SHWORDSPLIT_UNSET
       ZHS_HAS_SHWORDSPLIT_UNSET=1
       if nvm_has "setopt"; then
-        ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | command grep shwordsplit > /dev/null ; nvm_echo $?)
+        ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | nvm_grep shwordsplit > /dev/null ; nvm_echo $?)
         setopt shwordsplit
       fi
       nvm_err "nvm --version: v$(nvm --version)"
@@ -2013,7 +2030,7 @@ nvm() {
      nvm_echo "$NVM_SUCCESS_MSG"
 
       # rm any aliases that point to uninstalled version.
-      for ALIAS in $(command grep -l "$VERSION" "$(nvm_alias_path)/*" 2>/dev/null)
+      for ALIAS in $(nvm_grep -l "$VERSION" "$(nvm_alias_path)/*" 2>/dev/null)
       do
         nvm unalias "$(command basename "$ALIAS")"
       done
@@ -2162,7 +2179,7 @@ nvm() {
           return 11
         fi
       fi
-      if [ -n "$NVM_USE_OUTPUT" ]; then
+      if [ -n "${NVM_USE_OUTPUT-}" ]; then
         nvm_echo "$NVM_USE_OUTPUT"
       fi
     ;;
@@ -2228,22 +2245,20 @@ nvm() {
         NVM_IOJS=true
       fi
 
-      local ARGS
-      ARGS="$@"
       local EXIT_CODE
 
       local ZHS_HAS_SHWORDSPLIT_UNSET
       ZHS_HAS_SHWORDSPLIT_UNSET=1
       if nvm_has "setopt"; then
-        ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | command grep shwordsplit > /dev/null ; nvm_echo $?)
+        ZHS_HAS_SHWORDSPLIT_UNSET=$(setopt | nvm_grep shwordsplit > /dev/null ; nvm_echo $?)
         setopt shwordsplit
       fi
       if [ "_$VERSION" = "_N/A" ]; then
         nvm_ensure_version_installed "$provided_version"
       elif [ "$NVM_IOJS" = true ]; then
-        nvm exec "${NVM_SILENT-}" "$VERSION" iojs $ARGS
+        nvm exec "${NVM_SILENT-}" "$VERSION" iojs "$@"
       else
-        nvm exec "${NVM_SILENT-}" "$VERSION" node $ARGS
+        nvm exec "${NVM_SILENT-}" "$VERSION" node "$@"
       fi
       EXIT_CODE="$?"
       if [ "$ZHS_HAS_SHWORDSPLIT_UNSET" -eq 1 ] && nvm_has "unsetopt"; then
@@ -2359,7 +2374,7 @@ nvm() {
       local NVM_OUTPUT
       NVM_OUTPUT="$(nvm_echo "$NVM_LS_REMOTE_PRE_MERGED_OUTPUT
 $NVM_LS_REMOTE_IOJS_OUTPUT
-$NVM_LS_REMOTE_POST_MERGED_OUTPUT" | command grep -v "N/A" | command sed '/^$/d')"
+$NVM_LS_REMOTE_POST_MERGED_OUTPUT" | nvm_grep -v "N/A" | command sed '/^$/d')"
       if [ -n "$NVM_OUTPUT" ]; then
         nvm_print_versions "$NVM_OUTPUT"
         return $NVM_LS_REMOTE_EXIT_CODE || $NVM_LS_REMOTE_IOJS_EXIT_CODE
@@ -2528,7 +2543,7 @@ $NVM_LS_REMOTE_POST_MERGED_OUTPUT" | command grep -v "N/A" | command sed '/^$/d'
       nvm_remote_version "$2"
     ;;
     "--version" )
-      nvm_echo '0.31.1'
+      nvm_echo '0.31.2'
     ;;
     "unload" )
       unset -f nvm nvm_print_versions nvm_checksum \
@@ -2554,6 +2569,7 @@ $NVM_LS_REMOTE_POST_MERGED_OUTPUT" | command grep -v "N/A" | command sed '/^$/d'
         nvm_has_system_node nvm_has_system_iojs \
         nvm_download nvm_get_latest nvm_has nvm_get_latest \
         nvm_supports_source_options nvm_auto nvm_supports_xz \
+        nvm_echo nvm_err nvm_grep \
         nvm_has_colors nvm_process_parameters > /dev/null 2>&1
       unset RC_VERSION NVM_NODEJS_ORG_MIRROR NVM_DIR NVM_CD_FLAGS > /dev/null 2>&1
     ;;
@@ -2565,6 +2581,7 @@ $NVM_LS_REMOTE_POST_MERGED_OUTPUT" | command grep -v "N/A" | command sed '/^$/d'
 }
 
 nvm_supports_source_options() {
+  # shellcheck disable=SC1091
   [ "_$(echo '[ $# -gt 0 ] && echo $1' | . /dev/stdin yes 2> /dev/null)" = "_yes" ]
 }
 

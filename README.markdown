@@ -2,7 +2,7 @@
 
 ## Installation
 
-First you'll need to make sure your system has a c++ compiler. For OSX, XCode will work, for Ubuntu, the build-essential and libssl-dev packages work.
+First you'll need to make sure your system has a c++ compiler. For OS X, Xcode will work, for Ubuntu, the build-essential and libssl-dev packages work.
 
 Note: `nvm` does not support Windows (see [#284](https://github.com/creationix/nvm/issues/284)). Two alternatives exist, which are neither supported nor developed by us:
  - [nvm-windows](https://github.com/coreybutler/nvm-windows)
@@ -20,8 +20,13 @@ Note: We still have some problems with FreeBSD, because there is no pre-built bi
  - [[#900] [Bug] nodejs on FreeBSD need to be patched ](https://github.com/creationix/nvm/issues/900)
  - [nodejs/node#3716](https://github.com/nodejs/node/issues/3716)
 
-Note: On OSX, if you do not have XCode installed and you do not wish to download the ~4.3GB file, you can install the `Command Line Tools`. You can check out this blog post on how to just that:
+Note: On OS X, if you do not have Xcode installed and you do not wish to download the ~4.3GB file, you can install the `Command Line Tools`. You can check out this blog post on how to just that:
  - [How to Install Command Line Tools in OS X Mavericks & Yosemite (Without Xcode)](http://osxdaily.com/2014/02/12/install-command-line-tools-mac-os-x/)
+
+Note: On OS X, if you have/had a "system" node installed and want to install modules globally, keep in mind that:
+ - When using nvm you do not need `sudo` to globally install a module with `npm -g`, so instead of doing `sudo npm install -g grunt`, do instead `npm install -g grunt`
+ - If you have an `~/.npmrc` file, make sure it does not contain any `prefix` settings (which is not compatible with nvm)
+ - You can (but should not?) keep your previous "system" node install, but nvm will only be available to your user account (the one used to install nvm). This might cause version mismatches, as other users will be using `/usr/local/lib/node_modules/*` VS your user account using `~/.nvm/versions/node/vX.X.X/lib/node_modules/*`
 
 Homebrew installation is not supported.
 
@@ -29,24 +34,24 @@ Homebrew installation is not supported.
 
 To install or update nvm, you can use the [install script][2] using cURL:
 
-    curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.31.1/install.sh | bash
+    curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.31.2/install.sh | bash
 
 or Wget:
 
-    wget -qO- https://raw.githubusercontent.com/creationix/nvm/v0.31.1/install.sh | bash
+    wget -qO- https://raw.githubusercontent.com/creationix/nvm/v0.31.2/install.sh | bash
 
 <sub>The script clones the nvm repository to `~/.nvm` and adds the source line to your profile (`~/.bash_profile`, `~/.zshrc`, `~/.profile`, or `~/.bashrc`).</sub>
 
-You can customize the install source, directory and profile using the `NVM_SOURCE`, `NVM_DIR`, and `PROFILE` variables.
-Eg: `curl ... | NVM_DIR="path/to/nvm" bash`
+You can customize the install source, directory, profile, and version using the `NVM_SOURCE`, `NVM_DIR`, `PROFILE`, and `NODE_VERSION` variables.
+Eg: `curl ... | NVM_DIR=/usr/local/nvm bash` for a global install.
 
 <sub>*NB. The installer can use `git`, `curl`, or `wget` to download `nvm`, whatever is available.*</sub>
 
-Note: On OSX, if you get `nvm: command not found` after running the install script, your system may not have a [.bash_profile file] where the command is set up. Simple create one with `touch ~/.bash_profile` and run the install script again.
+Note: On OS X, if you get `nvm: command not found` after running the install script, your system may not have a [.bash_profile file] where the command is set up. Simply create one with `touch ~/.bash_profile` and run the install script again.
 
 ### Verify installation
 
-To verify that nvm has been installed, do
+To verify that nvm has been installed, do:
 
     command -v nvm
 
@@ -65,6 +70,7 @@ To activate nvm, you need to source it from your shell:
     . ~/.nvm/nvm.sh
 
 Add these lines to your `~/.bashrc`, `~/.profile`, or `~/.zshrc` file to have it automatically sourced upon login:
+(you may have to add to more than one of the above files)
 
     export NVM_DIR="$HOME/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" # This loads nvm
@@ -142,7 +148,7 @@ If you want to see what versions are available to install:
 
     nvm ls-remote
 
-To restore your PATH, you can deactivate it.
+To restore your PATH, you can deactivate it:
 
     nvm deactivate
 
@@ -249,15 +255,15 @@ Tests are written in [Urchin]. Install Urchin (and other dependencies) like so:
 There are slow tests and fast tests. The slow tests do things like install node
 and check that the right versions are used. The fast tests fake this to test
 things like aliases and uninstalling. From the root of the nvm git repository,
-run the fast tests like this.
+run the fast tests like this:
 
     npm run test/fast
 
-Run the slow tests like this.
+Run the slow tests like this:
 
     npm run test/slow
 
-Run all of the tests like this
+Run all of the tests like this:
 
     npm test
 
@@ -269,18 +275,18 @@ To activate, you need to source `bash_completion`:
 
   	[[ -r $NVM_DIR/bash_completion ]] && . $NVM_DIR/bash_completion
 
-Put the above sourcing line just below the sourcing line for NVM in your profile (`.bashrc`, `.bash_profile`).
+Put the above sourcing line just below the sourcing line for nvm in your profile (`.bashrc`, `.bash_profile`).
 
 ### Usage
 
-nvm
+nvm:
 
 	$ nvm [tab][tab]
     alias               deactivate          install             ls                  run                 unload
     clear-cache         exec                list                ls-remote           unalias             use
     current             help                list-remote         reinstall-packages  uninstall           version
 
-nvm alias
+nvm alias:
 
 	$ nvm alias [tab][tab]
 	default
@@ -288,12 +294,12 @@ nvm alias
 	$ nvm alias my_alias [tab][tab]
 	v0.6.21        v0.8.26       v0.10.28
 
-nvm use
+nvm use:
 
 	$ nvm use [tab][tab]
 	my_alias        default        v0.6.21        v0.8.26       v0.10.28
 
-nvm uninstall
+nvm uninstall:
 
 	$ nvm uninstall [tab][tab]
 	my_alias        default        v0.6.21        v0.8.26       v0.10.28
@@ -302,7 +308,7 @@ nvm uninstall
 `nvm` will encounter some issues if you have some non-default settings set. (see [#606](/../../issues/606))
 The following are known to cause issues:
 
-Inside `~/.npmrc`
+Inside `~/.npmrc`:
 ```
 prefix='some/path'
 ```
@@ -316,6 +322,25 @@ Shell settings:
 set -e
 ```
 
+## Installing nvm on Alpine Linux
+In order to provide the best performance (and other optimisations), nvm will download and install pre-compiled binaries for Node (and npm) when you run `nvm install X`. The Node project compiles, tests and hosts/provides pre-these compiled binaries which are built for mainstream/traditional Linux distributions (such as Debian, Ubuntu, CentOS, RedHat et al).
+
+Alpine Linux, unlike mainstream/traditional Linux distributions, is based on [busybox](https://www.busybox.net/), a very compact (~5MB) Linux distribution. Busybox (and thus Alpine Linux) uses a different C/C++ stack to most mainstream/traditional Linux distributions - [musl](https://www.musl-libc.org/). This makes binary programs built for such mainstream/traditional incompatible with Alpine Linux, thus we cannot simply `nvm install X` on Alpine Linux and expect the downloaded binary to run correctly - you'll likely see "...does not exist" errors if you try that.
+
+There is a `-s` flag for `nvm install` which requests nvm download Node source and compile it locally but currently (May 2016), this is not available for Node versions newer than v0.10 so unless you need an older Node version, this won't help you. Work is in progress on source-builds for newer Node versions but is not yet complete.
+
+If installing nvm on Alpine Linux *is* still what you want or need to do, you should be able to achieve this by running the following from you Alpine Linux shell:
+
+```
+apk add bash
+wget -qO- https://raw.githubusercontent.com/creationix/nvm/v0.31.2/install.sh | /bin/bash
+```
+
+The Node project has some desire but no concrete plans (due to the overheads of building, testing and support) to offer Alpine-compatible binaries.
+
+As a potential alternative, @mhart (a Node contributor) has some [Docker images for Alpine Linux with Node and optionally, npm, pre-installed](https://github.com/mhart/alpine-node).
+
+
 ## Problems
 
 If you try to install a node version and the installation fails, be sure to delete the node downloads from src (~/.nvm/src/) or you might get an error when trying to reinstall them again or you might get an error like the following:
@@ -326,7 +351,7 @@ Where's my 'sudo node'? Check out this link:
 
 https://github.com/creationix/nvm/issues/43
 
-On Arch Linux and other systems using python3 by default, before running *install* you need to
+On Arch Linux and other systems using python3 by default, before running *install* you need to:
 
       export PYTHON=python2
 
@@ -337,7 +362,7 @@ After the v0.8.6 release of node, nvm tries to install from binary packages. But
 If setting the `default` alias does not establish the node version in new shells (i.e. `nvm current` yields `system`), ensure that the system's node PATH is set before the `nvm.sh` source line in your shell profile (see [#658](https://github.com/creationix/nvm/issues/658))
 
 [1]: https://github.com/creationix/nvm.git
-[2]: https://github.com/creationix/nvm/blob/v0.31.1/install.sh
+[2]: https://github.com/creationix/nvm/blob/v0.31.2/install.sh
 [3]: https://travis-ci.org/creationix/nvm
 [Urchin]: https://github.com/scraperwiki/urchin
 [Fish]: http://fishshell.com
