@@ -1,6 +1,6 @@
 #!/bin/sh
 
-die () { echo $@ ; cleanup ; exit 1; }
+die () { echo "$@" ; cleanup ; exit 1; }
 cleanup() {
   rm -rf "${NVM_DIR}/v0.2.3"
   rm -rf "${NVM_DIR}/v0.3.4"
@@ -13,7 +13,7 @@ cleanup() {
   unset -f nvm_ls_remote nvm_ls_remote_iojs
 }
 
-. ../../../nvm.sh
+\. ../../../nvm.sh
 
 mkdir "${NVM_DIR}/v0.2.3"
 mkdir "${NVM_DIR}/v0.3.4"

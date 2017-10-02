@@ -1,9 +1,9 @@
 #!/bin/sh
 
 
-die () { echo $@ ; exit 1; }
+die () { echo "$@" ; exit 1; }
 
-. ../../../nvm.sh
+\. ../../../nvm.sh
 
 echo "0.10.7" > .nvmrc
 

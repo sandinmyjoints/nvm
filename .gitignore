@@ -1,5 +1,5 @@
 HEAD
-src
+.cache
 v*
 alias
 
@@ -7,9 +7,11 @@ alias
 test/bak
 .urchin.log
 .urchin_stdout
+test/**/test_output
 
 node_modules/
 npm-debug.log
 
 .DS_Store
 current
+default-packages

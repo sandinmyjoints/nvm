@@ -1,9 +1,9 @@
 #!/bin/sh
 
-. ../../../nvm.sh
-. ../../common.sh
+\. ../../../nvm.sh
+\. ../../common.sh
 
-die () { echo $@ ; exit 1; }
+die () { echo "$@" ; exit 1; }
 
 if [ -n "$ZSH_VERSION" ]; then
   # set clobber option in order to test that this does not produce any

@@ -1,9 +1,9 @@
 #!/bin/sh
 
 cleanup () { unalias foo; unalias grep; }
-die () { echo $@ ; cleanup ; exit 1; }
+die () { echo "$@" ; cleanup ; exit 1; }
 
-. ../../../nvm.sh
+\. ../../../nvm.sh
 
 alias foo='bar'
 nvm_is_alias foo || die '"nvm_is_alias foo" was not true'

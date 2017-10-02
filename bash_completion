@@ -2,6 +2,10 @@
 
 # bash completion for Node Version Manager (NVM)
 
+if ! nvm &> /dev/null; then
+    return
+fi
+
 __nvm_generate_completion()
 {
   declare current_word
@@ -17,12 +21,13 @@ __nvm_commands ()
 
   current_word="${COMP_WORDS[COMP_CWORD]}"
 
-  COMMANDS='\
-    help install uninstall use run exec \
-    alias unalias reinstall-packages \
-    current list ls list-remote ls-remote \
-    clear-cache deactivate unload \
-    version which'
+  COMMANDS='
+    help install uninstall use run exec
+    alias unalias reinstall-packages
+    current list ls list-remote ls-remote
+    install-latest-npm
+    cache deactivate unload
+    version version-remote which'
 
     if [ ${#COMP_WORDS[@]} == 4 ]; then
 
@@ -56,10 +61,10 @@ __nvm_aliases ()
 {
   declare aliases
   aliases=""
-  if [ -d $NVM_DIR/alias ]; then
-    aliases="`cd $NVM_DIR/alias && command ls`"
+  if [ -d "$NVM_DIR/alias" ]; then
+    aliases="$(cd "$NVM_DIR/alias" && command find "$PWD" -type f | command sed "s:$PWD/::")"
   fi
-  echo "${aliases}"
+  echo "${aliases} node stable unstable iojs"
 }
 
 __nvm_alias ()
@@ -85,8 +90,8 @@ __nvm ()
 # called bashcompinit that will create a complete in ZSH. If the user is in
 # ZSH, load and run bashcompinit before calling the complete function.
 if [[ -n ${ZSH_VERSION-} ]]; then
-	autoload -U +X bashcompinit && bashcompinit
+  autoload -U +X bashcompinit && bashcompinit
 fi
 
-complete -o default -o nospace -F __nvm nvm
+complete -o default -F __nvm nvm
 

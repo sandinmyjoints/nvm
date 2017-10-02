@@ -5,9 +5,9 @@ cleanup () {
   alias npm='\npm'
   unset -f nvm_has npm
 }
-die () { echo $@ ; exit 1; }
+die () { echo "$@" ; exit 1; }
 
-. ../../../nvm.sh
+\. ../../../nvm.sh
 
 nvm_has() { return 1; }
 OUTPUT="$(nvm_print_npm_version)"
